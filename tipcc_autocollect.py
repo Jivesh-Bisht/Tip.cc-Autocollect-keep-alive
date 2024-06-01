@@ -17,7 +17,16 @@ from art import tprint
 from discord import Client, HTTPException, LoginFailure, Message, NotFound, Status
 from discord.ext import tasks
 from questionary import checkbox, select, text
+from flask import Flask
+import os
+app = Flask(__name__)
 
+@app.route('/')
+def hello_world():
+    return 'Hello, World!'
+
+
+port = os.environ['PORT']
 
 class ColourFormatter(
     Formatter
@@ -153,16 +162,7 @@ def validate_threshold_chance(s):
 
 
 if config["TOKEN"] == "":
-    token_input = text(
-        "What is your discord token?",
-        qmark="->",
-        validate=lambda x: validate_token(x),
-    ).ask()
-    if token_input is not None:
-        config["TOKEN"] = token_input
-        with open("config.json", "w") as f:
-            dump(config, f, indent=4)
-        logger.debug("Token saved.")
+    config["TOKEN"] = os.environ["TOKEN"]
 
 if config["FIRST"] == True:
     config["PRESENCE"] = select(
@@ -346,14 +346,7 @@ if config["FIRST"] == True:
     else:
         ignore_users = [int(x) for x in ignore_users.split(",")]
     config["IGNORE_USERS"] = ignore_users
-    user_id = int(
-        text(
-            "What is your main accounts id?\n\nIf you are sniping from your main, put your main accounts' id.",
-            validate=lambda x: x.isnumeric() and 17 <= len(x) <= 19,
-            qmark="->",
-        ).ask()
-    )
-    config["id"] = user_id
+    config["id"] = os.environ["id"]
     channel_id = int(
         text(
             "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.",
@@ -763,9 +756,14 @@ async def on_message(original_message: Message):
 
 if __name__ == "__main__":
     try:
+        app.run(host='0.0.0.0', port=port)
         client.run(config["TOKEN"], log_handler=handler, log_formatter=formatter)
     except LoginFailure:
         logger.critical("Invalid token, restart the program.")
         config["TOKEN"] = ""
         with open("config.json", "w") as f:
             dump(config, f, indent=4)
+
+
+
+app.run(host='0.0.0.0', port=port)
