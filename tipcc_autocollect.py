@@ -17,16 +17,22 @@ from art import tprint
 from discord import Client, HTTPException, LoginFailure, Message, NotFound, Status
 from discord.ext import tasks
 from questionary import checkbox, select, text
+
+import os 
+import threading
 from flask import Flask
-import os
+
+
+TOKEN = os.environ["TOKEN"]
+PORT = os.environ["PORT"]
+ID = os.environ["id"]
+
+
 app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
-
-
-port = os.environ['PORT']
 
 class ColourFormatter(
     Formatter
@@ -95,16 +101,14 @@ print("\033[0;35m")
 tprint("QuartzWarrior", font="smslant")
 print("\033[0m")
 
-try:
-    with open("config.json", "r") as f:
-        config = load(f)
-except FileNotFoundError:
-    config = {
-        "TOKEN": "",
+
+
+config = {
+        "TOKEN": TOKEN,
         "PRESENCE": "invisible",
-        "CPM": 310,
-        "FIRST": True,
-        "id": 0,
+        "CPM": 80,
+        "FIRST": False,
+        "id": ID,
         "channel_id": 0,
         "TARGET_AMOUNT": 0.0,
         "SMART_DELAY": True,
@@ -118,17 +122,14 @@ except FileNotFoundError:
         "BLACKLIST_ON": False,
         "CHANNEL_BLACKLIST_ON": False,
         "IGNORE_DROPS_UNDER": 0.0,
-        "IGNORE_TIME_UNDER": 0.0,
+        "IGNORE_TIME_UNDER": 1.0,
         "IGNORE_THRESHOLDS": [],
         "DISABLE_AIRDROP": False,
         "DISABLE_TRIVIADROP": False,
         "DISABLE_MATHDROP": False,
         "DISABLE_PHRASEDROP": False,
-        "DISABLE_REDPACKET": False,
+        "DISABLE_REDPACKET": True,
     }
-    with open("config.json", "w") as f:
-        dump(config, f, indent=4)
-
 token_regex = compile(r"[\w-]{24}\.[\w-]{6}\.[\w-]{27,}")
 decimal_regex = compile(r"^-?\d+(?:\.\d+)$")
 
@@ -159,218 +160,6 @@ def validate_threshold_chance(s):
         if s == "":
             return True
         return False
-
-
-if config["TOKEN"] == "":
-    config["TOKEN"] = os.environ["TOKEN"]
-
-if config["FIRST"] == True:
-    config["PRESENCE"] = select(
-        "What do you want your presence to be?",
-        choices=[
-            "online",
-            "idle",
-            "dnd",
-            "invisible",
-        ],
-        default="invisible",
-        qmark="->",
-    ).ask()
-    config["CPM"] = int(
-        text(
-            "What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector more legit.\nRemember, the higher the faster!",
-            default="310",
-            qmark="->",
-            validate=lambda x: (validate_decimal(x) or x.isnumeric()) and float(x) >= 0,
-        ).ask()
-    )
-    config["FIRST"] = False
-    config["DISABLE_AIRDROP"] = False
-    config["DISABLE_TRIVIADROP"] = False
-    config["DISABLE_MATHDROP"] = False
-    config["DISABLE_PHRASEDROP"] = False
-    config["DISABLE_REDPACKET"] = False
-    disable_drops = checkbox(
-        "What drop types do you want to disable? (Leave blank for none)",
-        choices=[
-            "airdrop",
-            "triviadrop",
-            "mathdrop",
-            "phrasedrop",
-            "redpacket",
-        ],
-        qmark="->",
-    ).ask()
-    if not disable_drops:
-        disable_drops = []
-    if "airdrop" in disable_drops:
-        config["DISABLE_AIRDROP"] = True
-    if "triviadrop" in disable_drops:
-        config["DISABLE_TRIVIADROP"] = True
-    if "mathdrop" in disable_drops:
-        config["DISABLE_MATHDROP"] = True
-    if "phrasedrop" in disable_drops:
-        config["DISABLE_PHRASEDROP"] = True
-    if "redpacket" in disable_drops:
-        config["DISABLE_REDPACKET"] = True
-    ignore_drops_under = text(
-        "What is the minimum amount of money you want to ignore?",
-        default="0",
-        qmark="->",
-        validate=lambda x: ((validate_decimal(x) or x.isnumeric()) and float(x) >= 0)
-        or x == "",
-    ).ask()
-    if ignore_drops_under != "":
-        config["IGNORE_DROPS_UNDER"] = float(ignore_drops_under)
-    else:
-        config["IGNORE_DROPS_UNDER"] = 0.0
-    ignore_time_under = text(
-        "What is the minimum time you want to ignore?",
-        default="0",
-        qmark="->",
-        validate=lambda x: ((validate_decimal(x) or x.isnumeric()) and float(x) >= 0)
-        or x == "",
-    ).ask()
-    if ignore_time_under != "":
-        config["IGNORE_TIME_UNDER"] = float(ignore_time_under)
-    else:
-        config["IGNORE_TIME_UNDER"] = 0.0
-    ignore_thresholds = text(
-        "Enter your ignore thresholds and chances in the format 'threshold:chance', separated by commas (e.g. '0.10:10,0.20:20')",
-        validate=lambda x: all(validate_threshold_chance(pair) for pair in x.split(","))
-        or x == "",
-        default="",
-        qmark="->",
-    ).ask()
-    if ignore_thresholds != "":
-        config["IGNORE_THRESHOLDS"] = [
-            {"threshold": float(pair.split(":")[0]), "chance": int(pair.split(":")[1])}
-            for pair in ignore_thresholds.split(",")
-        ]
-    else:
-        config["IGNORE_THRESHOLDS"] = []
-    smart_delay = select(
-        "Do you want to enable smart delay? (This will make the bot wait for the drop to end before claiming it)",
-        choices=["yes", "no"],
-        qmark="->",
-    ).ask()
-    if smart_delay == "yes":
-        config["SMART_DELAY"] = True
-    else:
-        config["SMART_DELAY"] = False
-        manual_delay = text(
-            "What is the delay you want to use in seconds? (Leave blank for none)",
-            validate=lambda x: (validate_decimal(x) or x.isnumeric()) or x == "",
-            default="0",
-            qmark="->",
-        ).ask()
-        if manual_delay != "":
-            config["DELAY"] = float(manual_delay)
-        else:
-            config["DELAY"] = 0
-    enable_whitelist = select(
-        "Do you want to enable whitelist? (This will only enter drops in the servers you specify)",
-        choices=["yes", "no"],
-        qmark="->",
-    ).ask()
-    config["WHITELIST_ON"] = enable_whitelist == "yes"
-    if not config["WHITELIST_ON"]:
-        enable_blacklist = select(
-            "Do you want to enable blacklist? (This will ignore drops in the servers you specify)",
-            choices=["yes", "no"],
-            qmark="->",
-        ).ask()
-        config["BLACKLIST_ON"] = enable_blacklist == "yes"
-        if config["BLACKLIST_ON"]:
-            blacklist = text(
-                "What servers do you want to blacklist? Seperate each server ID with a comma.",
-                validate=lambda x: (
-                    len(x) > 0
-                    and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
-                )
-                or x == "",
-                qmark="->",
-            ).ask()
-            if not blacklist:
-                blacklist = []
-            else:
-                blacklist = [int(x) for x in blacklist.split(",")]
-            config["BLACKLIST"] = blacklist
-    else:
-        whitelist = text(
-            "What servers do you want to whitelist? Seperate each server ID with a comma.",
-            validate=lambda x: (
-                len(x) > 0
-                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
-            )
-            or x == "",
-            qmark="->",
-        ).ask()
-        if not whitelist:
-            whitelist = []
-        else:
-            whitelist = [int(x) for x in whitelist.split(",")]
-        config["WHITELIST"] = whitelist
-    enable_blacklist = select(
-        "Do you want to enable channel blacklist? (This will ignore drops in the channels you specify)",
-        choices=["yes", "no"],
-        qmark="->",
-    ).ask()
-    config["CHANNEL_BLACKLIST_ON"] = enable_blacklist == "yes"
-    if config["CHANNEL_BLACKLIST_ON"]:
-        blacklist = text(
-            "What channels do you want to blacklist? Seperate each channel ID with a comma.",
-            validate=lambda x: (
-                len(x) > 0
-                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
-            )
-            or x == "",
-            qmark="->",
-        ).ask()
-        if not blacklist:
-            blacklist = []
-        else:
-            blacklist = [int(x) for x in blacklist.split(",")]
-        config["CHANNEL_BLACKLIST"] = blacklist
-    ignore_users = text(
-        "What users do you want to ignore? Seperate each user ID with a comma.",
-        validate=lambda x: (
-            len(x) > 0
-            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
-        )
-        or x == "",
-        qmark="->",
-    ).ask()
-    if not ignore_users:
-        ignore_users = []
-    else:
-        ignore_users = [int(x) for x in ignore_users.split(",")]
-    config["IGNORE_USERS"] = ignore_users
-    config["id"] = os.environ["id"]
-    channel_id = int(
-        text(
-            "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.",
-            validate=lambda x: x.isnumeric() and (17 <= len(x) <= 19 or int(x) == 1),
-            default="1",
-            qmark="->",
-        ).ask()
-    )
-    config["channel_id"] = channel_id
-    target_amount = float(
-        text(
-            "What is the target amount you want to tip your main at? Set it to 0 to disable.",
-            validate=lambda x: validate_decimal(x),
-            default="0",
-            qmark="->",
-        ).ask()
-    )
-    config["TARGET_AMOUNT"] = target_amount
-    with open("config.json", "w") as f:
-        dump(config, f, indent=4)
-    logger.debug("Config saved.")
-
-
-banned_words = set(config["BANNED_WORDS"])
 
 client = Client(
     status=(
@@ -753,10 +542,8 @@ async def on_message(original_message: Message):
             f"User in ignore list detected in {original_message.channel.name}, skipping..."
         )
 
-
-if __name__ == "__main__":
+def run_bot():
     try:
-        app.run(host='0.0.0.0', port=port)
         client.run(config["TOKEN"], log_handler=handler, log_formatter=formatter)
     except LoginFailure:
         logger.critical("Invalid token, restart the program.")
@@ -764,6 +551,16 @@ if __name__ == "__main__":
         with open("config.json", "w") as f:
             dump(config, f, indent=4)
 
+def run_server():
+    app.run(host='0.0.0.0', port=PORT)
 
+if __name__ == "__main__":
 
-app.run(host='0.0.0.0', port=port)
+    flask_thread = threading.Thread(target=run_server)
+    discord_thread = threading.Thread(target=run_bot)
+    
+    flask_thread.start()
+    discord_thread.start()
+    
+    flask_thread.join()
+    discord_thread.join()
