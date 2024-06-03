@@ -133,7 +133,7 @@ config = {
 token_regex = compile(r"[\w-]{24}\.[\w-]{6}\.[\w-]{27,}")
 decimal_regex = compile(r"^-?\d+(?:\.\d+)$")
 
-
+banned_words = config["BANNED_WORDS"]
 def validate_token(token):
     if token_regex.search(token):
         return True
