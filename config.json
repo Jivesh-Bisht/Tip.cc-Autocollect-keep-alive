@@ -26,5 +26,5 @@
     "DISABLE_TRIVIADROP": false,
     "DISABLE_MATHDROP": false,
     "DISABLE_PHRASEDROP": false,
-    "DISABLE_REDPACKET": false,
+    "DISABLE_REDPACKET": false
 }
